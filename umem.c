@@ -15,48 +15,46 @@ typedef struct block {
 
 static block *head = NULL;
 static block *next_fit_ptr = NULL;
-static int algo;
+static int algorithm;
 static size_t total_size;
 
 int umeminit(size_t sizeOfRegion, int allocationAlgo) {
     if (head != NULL || sizeOfRegion <= 0) {
         return -1;
     }
-    
-    size_t page_size = getpagesize();
-    total_size = (sizeOfRegion + page_size - 1) / page_size * page_size;
-    
-    int fd = open("/dev/zero", O_RDWR);
-    void *ptr = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-    close(fd);
-    
+
+    size_t adjustedSize = sizeOfRegion + HEADER_SIZE;
+
+    void *ptr = mmap(NULL, adjustedSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) {
         perror("mmap");
         exit(1);
     }
-    
+
     head = (block *)ptr;
-    head->size = total_size - HEADER_SIZE;
+    // Adjusted for the space of the header
+    head->size = sizeOfRegion - HEADER_SIZE;  
     head->free = 1;
     head->next = NULL;
-    
-    algo = allocationAlgo;
-    
+
+    algorithm = allocationAlgo;
+    total_size = sizeOfRegion;
+
     return 0;
 }
 
 void *umalloc(size_t size) {
-    if (head == NULL) {
+    if (head == NULL || size == 0) {
         return NULL;
     }
-    
-    size = (size + 7) / 8 * 8; // Round up to nearest multiple of 8
+    // This rounds to the nearest 8 
+    size = (size + 7) / 8 * 8; 
     size += HEADER_SIZE;
     
     block *best = NULL;
     block *current = head;
     
-    if (algo == BEST_FIT) {
+    if (algorithm == BEST_FIT) {
         size_t min_size = total_size + 1;
         while (current) {
             if (current->free && current->size >= size && current->size < min_size) {
@@ -65,7 +63,7 @@ void *umalloc(size_t size) {
             }
             current = current->next;
         }
-    } else if (algo == WORST_FIT) {
+    } else if (algorithm == WORST_FIT) {
         size_t max_size = 0;
         while (current) {
             if (current->free && current->size >= size && current->size > max_size) {
@@ -74,7 +72,7 @@ void *umalloc(size_t size) {
             }
             current = current->next;
         }
-    } else if (algo == FIRST_FIT) {
+    } else if (algorithm == FIRST_FIT) {
         while (current) {
             if (current->free && current->size >= size) {
                 best = current;
@@ -82,7 +80,7 @@ void *umalloc(size_t size) {
             }
             current = current->next;
         }
-    } else if (algo == NEXT_FIT) {
+    } else if (algorithm == NEXT_FIT) {
         if (!next_fit_ptr) {
             next_fit_ptr = head;
         }
@@ -125,34 +123,34 @@ int ufree(void *ptr) {
         return 0;
     }
     
-    block *curr = (block *)((char *)ptr - HEADER_SIZE);
-    curr->free = 1;
+    block *current = (block *)((char *)ptr - HEADER_SIZE);
+    current->free = 1;
     
     // Coalesce with next block if free
-    if (curr->next && curr->next->free) {
-        curr->size += curr->next->size + HEADER_SIZE;
-        curr->next = curr->next->next;
+    if (current->next && current->next->free) {
+        current->size += current->next->size + HEADER_SIZE;
+        current->next = current->next->next;
     }
     
     // Coalesce with previous block if free
     block *prev = head;
-    while (prev && prev->next != curr) {
+    while (prev && prev->next != current) {
         prev = prev->next;
     }
     if (prev && prev->free) {
-        prev->size += curr->size + HEADER_SIZE;
-        prev->next = curr->next;
+        prev->size += current->size + HEADER_SIZE;
+        prev->next = current->next;
     }
     
     return 0;
 }
 
 void umemdump() {
-    block *curr = head;
+    block *current = head;
     printf("Memory Dump:\n");
-    while (curr) {
-        printf("%p: %zu bytes (%s)\n", (void *)((char *)curr + HEADER_SIZE), curr->size - HEADER_SIZE, curr->free ? "free" : "allocated");
-        curr = curr->next;
+    while (current) {
+        printf("%p: %zu bytes (%s)\n", (void *)((char *)current + HEADER_SIZE), current->size - HEADER_SIZE, current->free ? "free" : "allocated");
+        current = current->next;
     }
     printf("\n");
 }
