@@ -4,7 +4,6 @@
 #include <stdlib.h>
 
 #include "umem.h"
-#include "umem.c"
 
 //Test Function Delcarations 
 void allocateBlocks(void *ptrs[10]);
