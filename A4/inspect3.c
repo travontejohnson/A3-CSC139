@@ -23,89 +23,16 @@ static struct option long_options[] = {
     {0, 0, 0, 0}
 };
 
+char *formatTime(time_t time, int readable);
+char* getHumanReadableSize(off_t size);
+char* getPermissions(mode_t mode);
+void listFiles(const char *dirPath, int showInode, int recursive, int readable, int jsonOutput, FILE *logfp);
+void printFileInfo(const char *filePath, int showInode, int humanReadable, int jsonOutput);
+void printHumanReadableDate(time_t rawtime);
+void printHumanReadableSize(off_t size);
 void printJSONOutput(const char *filePath, struct stat *fileInfo, int readable);
 void printTextOutput(const char *filePath, struct stat *fileInfo, int readable);
-void listFiles(const char *dirPath, int showInode, int recursive, int readable, int jsonOutput, FILE *logfp);
-
-char* getPermissions(mode_t mode) {
-    static char perms[11];
-    perms[0] = S_ISDIR(mode) ? 'd' : S_ISLNK(mode) ? 'l' : '-';
-    perms[1] = (mode & S_IRUSR) ? 'r' : '-';
-    perms[2] = (mode & S_IWUSR) ? 'w' : '-';
-    perms[3] = (mode & S_IXUSR) ? 'x' : '-';
-    perms[4] = (mode & S_IRGRP) ? 'r' : '-';
-    perms[5] = (mode & S_IWGRP) ? 'w' : '-';
-    perms[6] = (mode & S_IXGRP) ? 'x' : '-';
-    perms[7] = (mode & S_IROTH) ? 'r' : '-';
-    perms[8] = (mode & S_IWOTH) ? 'w' : '-';
-    perms[9] = (mode & S_IXOTH) ? 'x' : '-';
-    perms[10] = '\0';
-
-    // Handle special permissions: setuid, setgid, sticky bit
-    if (mode & S_ISUID) perms[3] = (perms[3] == 'x') ? 's' : 'S';
-    if (mode & S_ISGID) perms[6] = (perms[6] == 'x') ? 's' : 'S';
-    if (mode & S_ISVTX) perms[9] = (perms[9] == 'x') ? 't' : 'T';
-
-    return perms;
-}
-
-char *formatTime(time_t time, int readable) {
-    static char buffer[20];
-    if (readable) {
-        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&time));
-        return buffer;
-     } 
-    else {
-        sprintf(buffer, "%ld", (long)time);
-        return buffer;
-    }
-}
-
-char* getHumanReadableSize(off_t size) {
-    static char readableSize[20];
-    if (size < 1024) sprintf(readableSize, "%lldB", (long long)size);
-    else if (size < 1024 * 1024) sprintf(readableSize, "%.1fK", size / 1024.0);
-    else if (size < 1024 * 1024 * 1024) sprintf(readableSize, "%.1fM", size / (1024.0 * 1024));
-    else sprintf(readableSize, "%.1f G", size / (1024.0 * 1024 * 1024));
-    return readableSize;
-}
-
-void printUsage(const char *programName) {
-    printf("Usage: %s [OPTION] [file_path|directory_path]\n", programName);
-    printf("Displays information about the specified file or directory.\n\n");
-    printf("Options:\n");
-    printf("  -?, --help          Display this help and exit.\n");
-    printf("  -i, --inode         Display detailed inode information for the specified file.\n");
-    printf("  -a, --all           Display inode information for all files within the specified directory.\n");
-    printf("  -r, --recursive     Recursively list files and directories.\n");
-}
-
-void printHumanReadableSize(off_t size) {
-    if (size < 1024) printf("%lld B", size);
-    else if (size < 1024 * 1024) printf("%.1f K", size / 1024.0);
-    else if (size < 1024 * 1024 * 1024) printf("%.1f M", size / (1024.0 * 1024));
-    else printf("%.1f G", size / (1024.0 * 1024 * 1024));
-}
-
-void printHumanReadableDate(time_t rawtime) {
-    struct tm *timeinfo = localtime(&rawtime);
-    char buffer[80];
-    strftime(buffer, sizeof(buffer), "%b %d %Y %H:%M", timeinfo);
-    printf("%s", buffer);
-}
-
-void printFileInfo(const char *filePath, int showInode, int humanReadable, int jsonOutput) {
-    struct stat fileInfo;
-    if (stat(filePath, &fileInfo) != 0) {
-        perror("Failed to get file stats");
-        return;
-    }
-    if (jsonOutput) {
-        printJSONOutput(filePath, &fileInfo, humanReadable);
-    } else {
-        printTextOutput(filePath, &fileInfo, humanReadable); 
-    }
-}
+void printUsage(const char *programName);
 
 int main(int argc, char *argv[]) {
     int opt, option_index = 0;
@@ -130,7 +57,6 @@ int main(int argc, char *argv[]) {
                 human = 1;
                 break;
             case 'f':
-
                 if (optind < argc && argv[optind] != NULL) {
                     char *format = argv[optind];
                     if (strcmp(format, "json") == 0) {
@@ -183,7 +109,6 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
-    // if (format && !jsonOutput && !textOutput) {jsonOutput = 0; printf("\n\n\n error");}
 
     if (showAll) {
         char *dirPath = (optind < argc) ? argv[optind] : ".";
@@ -207,6 +132,7 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
 
 void listFiles(const char *dirPath, int showInode, int recursive, int readable, int jsonOutput, FILE *logfp) {
     DIR *dir;
@@ -272,3 +198,82 @@ void printTextOutput(const char *filePath, struct stat *fileInfo, int readable) 
     printf("  Status Change Time: %s\n", formatTime(fileInfo->st_ctime, readable));
 }
 
+char* getPermissions(mode_t mode) {
+    static char perms[11];
+    perms[0] = S_ISDIR(mode) ? 'd' : S_ISLNK(mode) ? 'l' : '-';
+    perms[1] = (mode & S_IRUSR) ? 'r' : '-';
+    perms[2] = (mode & S_IWUSR) ? 'w' : '-';
+    perms[3] = (mode & S_IXUSR) ? 'x' : '-';
+    perms[4] = (mode & S_IRGRP) ? 'r' : '-';
+    perms[5] = (mode & S_IWGRP) ? 'w' : '-';
+    perms[6] = (mode & S_IXGRP) ? 'x' : '-';
+    perms[7] = (mode & S_IROTH) ? 'r' : '-';
+    perms[8] = (mode & S_IWOTH) ? 'w' : '-';
+    perms[9] = (mode & S_IXOTH) ? 'x' : '-';
+    perms[10] = '\0';
+
+    // Handle special permissions: setuid, setgid, sticky bit
+    if (mode & S_ISUID) perms[3] = (perms[3] == 'x') ? 's' : 'S';
+    if (mode & S_ISGID) perms[6] = (perms[6] == 'x') ? 's' : 'S';
+    if (mode & S_ISVTX) perms[9] = (perms[9] == 'x') ? 't' : 'T';
+
+    return perms;
+}
+
+void printFileInfo(const char *filePath, int showInode, int humanReadable, int jsonOutput) {
+    struct stat fileInfo;
+    if (stat(filePath, &fileInfo) != 0) {
+        perror("Failed to get file stats");
+        return;
+    }
+    if (jsonOutput) {
+        printJSONOutput(filePath, &fileInfo, humanReadable);
+    } else {
+        printTextOutput(filePath, &fileInfo, humanReadable); 
+    }
+}
+
+char *formatTime(time_t time, int readable) {
+    static char buffer[20];
+    if (readable) {
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&time));
+        return buffer;
+     } 
+    else {
+        sprintf(buffer, "%ld", (long)time);
+        return buffer;
+    }
+}
+
+char* getHumanReadableSize(off_t size) {
+    static char readableSize[20];
+    if (size < 1024) sprintf(readableSize, "%lldB", (long long)size);
+    else if (size < 1024 * 1024) sprintf(readableSize, "%.1fK", size / 1024.0);
+    else if (size < 1024 * 1024 * 1024) sprintf(readableSize, "%.1fM", size / (1024.0 * 1024));
+    else sprintf(readableSize, "%.1f G", size / (1024.0 * 1024 * 1024));
+    return readableSize;
+}
+
+void printUsage(const char *programName) {
+    printf("Usage: %s [OPTION] [file_path|directory_path]\n", programName);
+    printf("Displays information about the specified file or directory.\n\n");
+    printf("Options:\n");
+    printf("  -?, --help          Display this help and exit.\n");
+    printf("  -i, --inode         Display detailed inode information for the specified file.\n");
+    printf("  -a, --all           Display inode information for all files within the specified directory.\n");
+    printf("  -r, --recursive     Recursively list files and directories.\n");
+}
+
+void printHumanReadableSize(off_t size) {
+    if (size < 1024) printf("%lld B", size);
+    else if (size < 1024 * 1024) printf("%.1f K", size / 1024.0);
+    else if (size < 1024 * 1024 * 1024) printf("%.1f M", size / (1024.0 * 1024));
+    else printf("%.1f G", size / (1024.0 * 1024 * 1024));
+}
+
+void printHumanReadableDate(time_t rawtime) {
+    struct tm *timeinfo = localtime(&rawtime);
+    char buffer[80];
+    strftime(buffer, sizeof(buffer), "%b %d %Y %H:%M", timeinfo);
+    printf("%s", buffer);
+}
